@@ -8,6 +8,8 @@ import operator
 import enchant
 from nltk.metrics import edit_distance
 import csv
+import random
+from nltk.corpus import wordnet
 
 class SpellCorrection(object):
     def __init__(self, dict_name='en-US', max_dist=2):
@@ -23,7 +25,6 @@ class SpellCorrection(object):
             return None
         
 ### To Do: we can consider words with different POS as different words
-### To Do: we can check whether the user really knows the answer or not (for example by multiple choices questions)
         
 if os.path.exists('word_list.csv'):
     with open('word_list.csv', 'r') as f:
@@ -68,13 +69,39 @@ else:
         for row in sorted_words:
             csv_out.writerow(row)
             
+# Multiple-choice check: when the user claims to know a word, show its WordNet definition
+# among a few definitions of other random words, and only count the word as known if the
+# right one is picked.
+NUM_CHOICES = 4
+
+def definition(word):
+    synsets = wordnet.synsets(word)
+    return synsets[0].definition() if synsets else None
+
+def knows_word(word, words):
+    correct = definition(word)
+    if correct is None:
+        return True # no definition available, so we trust the user's answer
+    distractors = set()
+    while len(distractors) < NUM_CHOICES - 1:
+        d = definition(random.choice(words)[0])
+        if d and d != correct:
+            distractors.add(d)
+    options = list(distractors) + [correct]
+    random.shuffle(options)
+    print('Which one is the meaning of "%s"?' % word)
+    for i, o in enumerate(options):
+        print('  %s) %s' % ('abcdefghij'[i], o))
+    answer = input().strip().lower()
+    return answer != '' and 'abcdefghij'.find(answer[0]) == options.index(correct)
+
 # interact with user to find his/her vocabulary level
 start = 0
 end = len(sorted_words)-1
 while start <= end:
     pos = int((start+end)/2)
     print('Do you know the meaning of "%s" (y,n)?' % sorted_words[pos][0])
-    if input()=='n':
+    if input()=='n' or not knows_word(sorted_words[pos][0], sorted_words):
         end = pos - 1
         pos -= 1 # position of the last word that you know
     else:
